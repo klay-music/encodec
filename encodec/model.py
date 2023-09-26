@@ -217,8 +217,8 @@ class EncodecModel(nn.Module):
         lm.eval()
         return lm
 
-    @staticmethod
-    def _get_model(target_bandwidths: tp.List[float],
+    @classmethod
+    def _get_model(cls, target_bandwidths: tp.List[float],
                    sample_rate: int = 24_000,
                    channels: int = 1,
                    causal: bool = True,
@@ -234,7 +234,7 @@ class EncodecModel(nn.Module):
             n_q=n_q,
             bins=1024,
         )
-        model = EncodecModel(
+        model = cls(
             encoder,
             decoder,
             quantizer,
@@ -260,8 +260,8 @@ class EncodecModel(nn.Module):
             url = _get_checkpoint_url(ROOT_URL, checkpoint_name)
             return torch.hub.load_state_dict_from_url(url, map_location='cpu', check_hash=True)  # type:ignore
 
-    @staticmethod
-    def encodec_model_24khz(pretrained: bool = True, repository: tp.Optional[Path] = None):
+    @classmethod
+    def encodec_model_24khz(cls, pretrained: bool = True, repository: tp.Optional[Path] = None):
         """Return the pretrained causal 24khz model.
         """
         if repository:
@@ -270,18 +270,18 @@ class EncodecModel(nn.Module):
         checkpoint_name = 'encodec_24khz-d7cc33bc.th'
         sample_rate = 24_000
         channels = 1
-        model = EncodecModel._get_model(
+        model = cls._get_model(
             target_bandwidths, sample_rate, channels,
             causal=True, model_norm='weight_norm', audio_normalize=False,
             name='encodec_24khz' if pretrained else 'unset')
         if pretrained:
-            state_dict = EncodecModel._get_pretrained(checkpoint_name, repository)
+            state_dict = cls._get_pretrained(checkpoint_name, repository)
             model.load_state_dict(state_dict)
         model.eval()
         return model
 
-    @staticmethod
-    def encodec_model_48khz(pretrained: bool = True, repository: tp.Optional[Path] = None):
+    @classmethod
+    def encodec_model_48khz(cls, pretrained: bool = True, repository: tp.Optional[Path] = None):
         """Return the pretrained 48khz model.
         """
         if repository:
@@ -290,12 +290,12 @@ class EncodecModel(nn.Module):
         checkpoint_name = 'encodec_48khz-7e698e3e.th'
         sample_rate = 48_000
         channels = 2
-        model = EncodecModel._get_model(
+        model = cls._get_model(
             target_bandwidths, sample_rate, channels,
             causal=False, model_norm='time_group_norm', audio_normalize=True,
             segment=1., name='encodec_48khz' if pretrained else 'unset')
         if pretrained:
-            state_dict = EncodecModel._get_pretrained(checkpoint_name, repository)
+            state_dict = cls._get_pretrained(checkpoint_name, repository)
             model.load_state_dict(state_dict)
         model.eval()
         return model
@@ -318,6 +318,20 @@ def test():
         wav_in = wav.unsqueeze(0)
         wav_dec = model(wav_in)[0]
         assert wav.shape == wav_dec.shape, (wav.shape, wav_dec.shape)
+
+
+class EncodecEncoder(EncodecModel):
+    def forward(self, audio: torch.Tensor) -> torch.Tensor:
+        return self.encode(audio)
+
+
+class EncodecDecoder(EncodecModel):
+    def forward(self, codes: torch.Tensor) -> torch.Tensor:
+        frames: tp.List[EncodedFrame] = []
+        for offset in range(0, codes.shape[-1], self.frame_rate):
+            frame = codes[..., offset: offset + self.frame_rate]
+            frames.append((frame, None))
+        return self.decode(frames)
 
 
 if __name__ == '__main__':
