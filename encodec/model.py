@@ -322,7 +322,8 @@ def test():
 
 class EncodecEncoder(EncodecModel):
     def forward(self, audio: torch.Tensor) -> torch.Tensor:
-        return self.encode(audio)
+        frames = self.encode(audio)
+        return torch.cat([f[0] for f in frames], dim=-1)
 
 
 class EncodecDecoder(EncodecModel):
