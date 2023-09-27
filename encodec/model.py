@@ -329,9 +329,12 @@ class EncodecEncoder(EncodecModel):
 class EncodecDecoder(EncodecModel):
     def forward(self, codes: torch.Tensor) -> torch.Tensor:
         frames: tp.List[EncodedFrame] = []
-        for offset in range(0, codes.shape[-1], self.frame_rate):
-            frame = codes[..., offset: offset + self.frame_rate]
-            frames.append((frame, None))
+        if self.sample_rate == 48000:
+            for offset in range(0, codes.shape[-1], self.frame_rate):
+                frame = codes[..., offset: offset + self.frame_rate]
+                frames.append((frame, None))
+        elif self.sample_rate == 24000:
+            frames = [(codes, None)]
         return self.decode(frames)
 
 
